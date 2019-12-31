@@ -15,6 +15,7 @@ var app = express();
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'pug');
+app.set('port', 3001);
 
 app.use(session({ secret: 'keyboard cat'}))
 app.use(compression())
