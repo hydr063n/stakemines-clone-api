@@ -1,5 +1,5 @@
 var express = require('express');
-var db = require('./data/db.js');
+var db = require('../data/db.js');
 var router = express.Router();
 
 /* GET home page. */
