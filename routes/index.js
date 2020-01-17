@@ -4,17 +4,89 @@ var Cookies = require('universal-cookie')
 var bcrypt = require('bcrypt')
 var db = require('../data/db.js')
 var router = express.Router()
+var urlencode = require('urlencode')
+
+router.all('/', function(req, res, next) {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "X-Requested-With");
+  res.set('Access-Control-Allow-Credentials', 'http://localhost:3002')
+  res.set('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
+  res.set('Access-Control-Allow-Headers', 'X-PINGOTHER, Content-Type')
+  next()
+})
+
+router.all('/getMessage', function(req, res, next) {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "X-Requested-With");
+  res.set('Access-Control-Allow-Credentials', 'http://localhost:3002')
+  res.set('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
+  res.set('Access-Control-Allow-Headers', 'X-PINGOTHER, Content-Type')
+  next()
+})
+
+router.all('/user/login', function(req, res, next) {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "X-Requested-With");
+  res.set('Access-Control-Allow-Credentials', 'http://localhost:3002')
+  res.set('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
+  res.set('Access-Control-Allow-Headers', 'X-PINGOTHER, Content-Type')
+  next()
+})
+
+router.all('/user/register', function(req, res, next) {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "X-Requested-With");
+  res.set('Access-Control-Allow-Credentials', 'http://localhost:3002')
+  res.set('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
+  res.set('Access-Control-Allow-Headers', 'X-PINGOTHER, Content-Type')
+  next()
+})
 
 router.get('/', function(req, res, next) {
-  res.send('Hex FM API')
+  db.Message
+  .findAll({
+    include: db.User
+  })
+  .then((messages) => {
+
+    console.log(messages)
+
+    res.set('Content-Type', 'application/json');
+    res.send(messages)
+
+  }).catch((error) => {
+    console.log(error)
+  })
+})
+
+router.post('/getMessage', function(req, res, next) {
+  console.log('DATA')
+  console.log(req.body)
+
+  const message = req.body.payload.message
+  const user = req.body.payload.user
+
+  const data = jwt.verify(user.token, 'keyboardcat')
+
+  db.Message.create({
+    userId: data.id,
+    text: urlencode(message)
+  }).then(message => {
+    console.log('Message created successfully', message)
+    res.send('Success')
+  }).catch(error => {
+    console.log('Failed to create the message')
+    res.send('Error')
+  })
 })
 
 router.post('/user/register', function(req, res, next) {
-  console.log(req.body.email)
+
+  const payload = req.body.payload
 
   db.User.findOne({
     where: {
-      email: req.body.email
+      email: payload.email
     }
   }).then(user =>{
     if (user) {
@@ -22,7 +94,7 @@ router.post('/user/register', function(req, res, next) {
     } else {
       db.User.findOne({
         where: {
-          email: req.body.username
+          email: payload.username
         }
       }).then(nuser =>{
         if (nuser) {
@@ -30,21 +102,27 @@ router.post('/user/register', function(req, res, next) {
         } else {
           
           db.User.create({
-            username: req.body.username,
-            email: req.body.email,
-            password: req.body.password,
+            username: payload.username,
+            email: payload.email,
+            password: payload.password,
           }).then(newUser => {
 
             console.log(newUser)
 
-            var token = jwt.sign({ id: user.id }, 'keyboardcat', {
+            var token = jwt.sign({
+              id: newUser.id,
+            }, 'keyboardcat', {
               expiresIn: 86400 // expires in 24 hours
             })
-      
-            var txt = 'You have registered! Token: ' + token
-            console.log(txt)
-            txt = txt + newUser
-            res.send(txt)
+
+            var response = {
+              username: newUser.username,
+              token: token,
+              isLoggedIn: true,
+              message: 'You have successfully registered!'
+            }
+
+            res.send(response)
 
           }).catch(function(err) {
             console.log(err)
@@ -66,14 +144,14 @@ router.post('/user/register', function(req, res, next) {
 
 
 router.post('/user/login', function(req, res, next) {
-
-  console.log(req.body.email)
-  console.log(req.body.password)
+  const payload = req.body.payload
+  console.log(payload.username)
+  console.log(payload.password)
 
   db.User.findOne({
     where: {
-      email: req.body.email,
-      password: req.body.password
+      email: payload.username,
+      password: payload.password
     }
   }).then(user => {
     if (user) {
@@ -86,6 +164,7 @@ router.post('/user/login', function(req, res, next) {
       req.session.token = token
 
       var response = {
+        username: user.username,
         isLoggedIn: true,
         token: token,
         message: 'You have successfully logged in.'
@@ -100,16 +179,21 @@ router.post('/user/login', function(req, res, next) {
 
       db.User.findOne({
         where: {
-          username: req.body.email,
-          password: req.body.password
+          username: payload.username,
+          password: payload.password
         }
       }).then(nuser => {
         if (nuser) {
           console.log('You have logged in with username!')
 
-          var token = jwt.sign({ id: user.id }, 'keyboardcat', {
-            expiresIn: 86400 // expires in 24 hours
-          })
+          var token = jwt.sign({
+              id: nuser.id,
+              username: nuser.username
+            }, 
+            'keyboardcat',
+            {
+              expiresIn: 86400 // expires in 24 hours
+            })
           
           req.session.token = token
 
@@ -126,13 +210,13 @@ router.post('/user/login', function(req, res, next) {
           console.log(msg)
           res.send(msg)
         }
-      }).catch(function(err){
+      }).catch(function(err) {
         console.log(err)
         console.log('Failed to do the sql query')
       })
 
     }
-  }).catch(function(err) {
+  }).catch((err) => {
     console.log(err)
     console.log('Failed to do sql query')
   })
@@ -161,11 +245,20 @@ router.get('/user/:key', function(req, res, next) {
   })
 })
 
-router.get('/testcookies', function(req, res, next) {
+/*router.get('/testcookies', function(req, res, next) {
   const cookies = new Cookies(req.headers.cookie)
   console.log(cookies.get('id'))
   console.log('Saved one')
   console.log(req.session.token)
+})*/
+
+router.post('/testToken', function(req, res, next) {
+  const payload = req.body.payload
+  console.log(payload)
+
+  const data = jwt.verify(payload, 'keyboardcat')
+  console.log(data);
+
 })
 
 module.exports = router
