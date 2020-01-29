@@ -15,11 +15,15 @@
     "helmet": "^3.21.2",
     "http-errors": "~1.6.3",
     "jsonwebtoken": "^8.5.1",
+    "mathjs": "^6.5.0",
     "morgan": "~1.9.1",
     "mysql2": "^2.1.0",
     "pug": "^2.0.4",
     "sequelize": "^5.21.3",
+    "socket.io": "^2.3.0",
+    "underscore": "^1.9.2",
     "universal-cookie": "^4.0.3",
-    "urlencode": "^1.1.0"
+    "urlencode": "^1.1.0",
+    "web3": "^1.2.5-rc.0"
   }
 }
