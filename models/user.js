@@ -12,6 +12,10 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.TEXT,
       defaultValue: '0x0',
     },
+    referralCode: {
+      type: DataTypes.TEXT,
+      defaultValue: '',
+    },
     hex_balance:  {
       type: DataTypes.DOUBLE,
       defaultValue: 0,

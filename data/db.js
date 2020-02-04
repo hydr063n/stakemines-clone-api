@@ -10,12 +10,14 @@ var LogModel = require('../models/log')
 var SettingModel = require('../models/setting')
 var MessageModel = require('../models/message')
 var TransactionModel = require('../models/transaction')
+var ReferralModel = require('../models/referral')
 
 const User = UserModel(sequelize, Sequelize)
 const Log = LogModel(sequelize, Sequelize)
 const Setting = SettingModel(sequelize, Sequelize)
 const Message = MessageModel(sequelize, Sequelize)
 const Transaction = TransactionModel(sequelize, Sequelize)
+const Referral = ReferralModel(sequelize, Sequelize)
 
 User.hasMany(Log)
 Log.belongsTo(User)
@@ -25,6 +27,9 @@ Message.belongsTo(User)
 
 User.hasMany(Transaction)
 Transaction.belongsTo(User)
+
+User.hasMany(Referral)
+Referral.belongsTo(User)
 
 sequelize.sync().then(() => {
   console.log(`Database & tables created!`)
@@ -36,5 +41,6 @@ module.exports = {
   Setting,
   Message,
   Transaction,
+  Referral,
   sequelize
 }

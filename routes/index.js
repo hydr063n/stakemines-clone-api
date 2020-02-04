@@ -1,20 +1,22 @@
-var express = require('express')
-var jwt = require('jsonwebtoken')
-var Cookies = require('universal-cookie')
-var bcrypt = require('bcrypt')
-var math = require('mathjs')
-var db = require('../data/db.js')
-var router = express.Router()
-var urlencode = require('urlencode')
-var Web3 = require('web3')
-var _ = require('underscore')
+const express = require('express')
+const jwt = require('jsonwebtoken')
+const Cookies = require('universal-cookie')
+const bcrypt = require('bcrypt')
+const math = require('mathjs')
+const db = require('../data/db')
+const { balance } = require('../data/socket')
+const router = express.Router()
+const urlencode = require('urlencode')
+const Web3 = require('web3')
+const _ = require('underscore')
+const sha1 = require('js-sha1')
 
-const hearts = 100000000
+
 
 router.all('/', function(req, res, next) {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Headers", "X-Requested-With");
-  res.set('Access-Control-Allow-Credentials', 'http://localhost:3002')
+  res.set('Access-Control-Allow-Credentials', 'http://localhost:3001')
   res.set('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
   res.set('Access-Control-Allow-Headers', 'X-PINGOTHER, Content-Type')
   next()
@@ -23,7 +25,7 @@ router.all('/', function(req, res, next) {
 router.all('/getMessage', function(req, res, next) {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Headers", "X-Requested-With");
-  res.set('Access-Control-Allow-Credentials', 'http://localhost:3002')
+  res.set('Access-Control-Allow-Credentials', 'http://localhost:3001')
   res.set('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
   res.set('Access-Control-Allow-Headers', 'X-PINGOTHER, Content-Type')
   next()
@@ -32,7 +34,7 @@ router.all('/getMessage', function(req, res, next) {
 router.all('/user/login', function(req, res, next) {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Headers", "X-Requested-With");
-  res.set('Access-Control-Allow-Credentials', 'http://localhost:3002')
+  res.set('Access-Control-Allow-Credentials', 'http://localhost:3001')
   res.set('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
   res.set('Access-Control-Allow-Headers', 'X-PINGOTHER, Content-Type')
   next()
@@ -41,17 +43,26 @@ router.all('/user/login', function(req, res, next) {
 router.all('/user/register', function(req, res, next) {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Headers", "X-Requested-With");
-  res.set('Access-Control-Allow-Credentials', 'http://localhost:3002')
+  res.set('Access-Control-Allow-Credentials', 'http://localhost:3001')
   res.set('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
   res.set('Access-Control-Allow-Headers', 'X-PINGOTHER, Content-Type')
   next()
 })
 
 
-router.all('/minesweeper', function(req, res, next) {
+router.all('/minesweeper/bet', function(req, res, next) {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Headers", "X-Requested-With");
-  res.set('Access-Control-Allow-Credentials', 'http://localhost:3002')
+  res.set('Access-Control-Allow-Credentials', 'http://localhost:3001')
+  res.set('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
+  res.set('Access-Control-Allow-Headers', 'X-PINGOTHER, Content-Type')
+  next()
+})
+
+router.all('/minesweeper/cashout', function(req, res, next) {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "X-Requested-With");
+  res.set('Access-Control-Allow-Credentials', 'http://localhost:3001')
   res.set('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
   res.set('Access-Control-Allow-Headers', 'X-PINGOTHER, Content-Type')
   next()
@@ -60,7 +71,7 @@ router.all('/minesweeper', function(req, res, next) {
 router.all('/getGameLog', function(req, res, next) {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Headers", "X-Requested-With");
-  res.set('Access-Control-Allow-Credentials', 'http://localhost:3002')
+  res.set('Access-Control-Allow-Credentials', 'http://localhost:3001')
   res.set('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
   res.set('Access-Control-Allow-Headers', 'X-PINGOTHER, Content-Type')
   next()
@@ -69,14 +80,26 @@ router.all('/getGameLog', function(req, res, next) {
 router.get('/', function(req, res, next) {
   db.Message
   .findAll({
-    include: db.User
+    include: db.User,
+    limit: 10
   })
   .then((messages) => {
 
     //console.log(messages)
 
     res.set('Content-Type', 'application/json');
-    res.send(messages)
+    let returnMessages = []
+    messages.forEach(message => {
+      let msg = { ...message.dataValues }
+      msg.username = msg.user.username
+      msg.user = null
+
+      //console.log(msg)
+
+      returnMessages.push(msg)
+    })
+
+    res.send(returnMessages)
 
   }).catch((error) => {
     console.log(error)
@@ -99,11 +122,15 @@ router.post('/getMessage', function(req, res, next) {
     userId: data.id,
     text: urlencode(message)
   }).then(message => {
+
     console.log('Message created successfully', message)
     res.send('Success')
+
   }).catch(error => {
+
     console.log('Failed to create the message')
     res.send('Error')
+
   })
 })
 
@@ -130,7 +157,8 @@ router.post('/user/register', function(req, res, next) {
           res.status(500).send('This username has already been used!')
         } else {
 
-          
+          let referralCode = sha1(payload.username)
+          console.log('referral code', referralCode)
 
           db.User.create(
             {
@@ -138,21 +166,70 @@ router.post('/user/register', function(req, res, next) {
               email: payload.email,
               password: payload.password,
               lol_address: '0x0',
-              hex_address: payload.hex_address
+              hex_address: payload.hex_address,
+              referralCode: referralCode.substring(0,7)
             }
           ).then(newUser => {
 
-            console.log('You have successfully registered!')
-            console.log(newUser)
+            console.log('You have successfully registered!', newUser.dataValues.id)
+            console.log('Referral Payload: ', payload.referralCode)
+
+            let referralNotice = ''
+            if (payload.referralCode !== null) {
+              // create referral item
+              db.User.findOne({
+                where: {
+                  referralCode: payload.referralCode
+                }
+              }).then(referralUser => {
+
+
+                if (referralUser) {
+                  console.log('Referral created successfully')
+  
+                  db.Referral.create({
+                    userId: referralUser.dataValues.id,
+                    referralUserId: newUser.dataValues.id
+                  }).then(referralItem => {
+                    console.log('Referral Created', referralItem)
+
+                      // update user balance
+                      db.User.update({
+                        hex_balance: db.sequelize.literal('hex_balance + 5000')
+                      }, {
+                        where: {
+                          id: referralUser.id
+                        }
+                      }).then(status => {
+                        console.log('User balance updated successfully', status)
+                      }).catch(function(err) {
+
+                        console.log('Failed to update the user.', referralItem)
+
+
+                      })
+
+                  }).catch(function(err) {
+  
+                    console.log('Failed to create referall item.', referralItem)
+  
+                  })
+
+                } else {
+                  console.log('Couldn\'t find any user with that referralCode')
+                }
+
+              })
+
+              
+
+             
+
+            }
+            
 
             var token = jwt.sign(
-              {
-                id: newUser.id,
-                username: newUser.username,
-                image: newUser.image,
-                hex_address: newUser.hex_address,
-                hex_balance: newUser.hex_balance,
-              }, 
+              newUser.dataValues, 
               'keyboardcat', 
               {
                 expiresIn: 86400 // expires in 24 hours
@@ -195,13 +272,7 @@ router.post('/user/login', function(req, res, next) {
     if (user) {
 
       var token = jwt.sign(
-        {
-          id: user.id,
-          username: user.username,
-          image: user.image,
-          hex_address: user.hex_address,
-          hex_balance: user.hex_balance
-        }, 
+        user, 
         'keyboardcat', 
         { expiresIn: 86400 } // expires in 24 hours
       )
@@ -229,14 +300,7 @@ router.post('/user/login', function(req, res, next) {
           console.log('You have logged in with username!', nuser)
 
           var token = jwt.sign(
-            {
-              id: nuser.id,
-              username: nuser.username,
-              id: nuser.id,
-              image: nuser.image,
-              hex_address: nuser.hex_address,
-              hex_balance: nuser.hex_balance
-            }, 
+            nuser.dataValues, 
             'keyboardcat',
             {
               expiresIn: 86400 // expires in 24 hours
@@ -301,7 +365,6 @@ router.post('/testToken', function(req, res, next) {
 
 router.post('/getGameLog', function(req, res, next) {
   const payload = req.body.payload
-  //console.log(payload)
 
   db.Log.findAll({
     limit: 10,
@@ -319,364 +382,315 @@ router.post('/getGameLog', function(req, res, next) {
   })
 })
 
-router.post('/minesweeper', function(req, res, next) {
+
+
+getMineLocations = (mines) => {            
+  const squareSize = 5
+  const bombCount = parseInt(mines)
+
+  var defaultCoordinates = {x: -1, y: -1}
+  var mines = []
+  var mineData = []
+
+  for (var i = 0; i < bombCount; i++) {
+      mines.push({x: -1, y: -1})
+  }
+
+  for(var i = 0; i < bombCount; i) {
+
+      const coordinates = {
+          x: Math.floor(Math.random() * squareSize),
+          y: Math.floor(Math.random() * squareSize)
+      }
+
+      var skip = false
+      for (var j = 0; j < bombCount; j++) {
+          if (mines[j].x === coordinates.x && mines[j].y === coordinates.y) {
+              skip = true
+              break
+          }
+      }
+      
+      if (!skip) {
+          mines[i].x = coordinates.x
+          mines[i].y = coordinates.y
+
+          const location = squareSize * coordinates.y + coordinates.x 
+
+          mineData.push(location.toString())
+          i++
+      }
+  }
+
+  return mineData
+}
+
+
+router.post('/minesweeper/bet', function(req, res, next) {
   const payload = req.body.payload
 
-  const minesweeper = payload.minesweeper
-  const token = payload.token
-
-  const data = jwt.verify(token, 'keyboardcat')
-
-  const controller = minesweeper.controller
-  const game = minesweeper.game
-
-  //check the data for win or loss
-  const nCr = (n, r) => (
-    math.factorial(n) / math.factorial(r) / math.factorial(n - r)
+  const user = jwt.verify(
+    payload.token, 
+    'keyboardcat'
   )
 
-  const calculateMultiplier = (mines, diamonds) => (
-    //house_edge = 0.01
-    (1 - 0.01) * nCr(25, diamonds) / nCr(25 - mines, diamonds)
-  )
 
-  console.log('Starting off calculation')
+  if (payload.type === 'cashout') {
 
-  
-  mines = game.mines
-  diamonds = game.selectedBlocks
+    console.log('Cashout dude')
 
-  mines = game.mines
-  diamonds = game.selectedBlocks
 
-  var detonatedBomb = false
-  for (var i = 0; i < diamonds.length; i++) {
-    for (var j = 0; j < mines.length; j++) {
-      if (diamonds[i] === mines[j]) {
-        detonatedBomb = true
-        break
+    db.Log.update({
+      status: 'win'
+    }, {
+      where: {
+        id: payload.gameId
       }
-    }
-  }
+    }).then(newLog => {
 
-  multiplier = calculateMultiplier(mines.length, diamonds.length)
-  var outcome = {}
-  var betAmount = parseFloat(controller.betAmount)
+      console.log('Game successfully updated. You can pay the user now: ', newLog)
 
-  if (detonatedBomb) {
-    outcome = {
-      payout: multiplier * -1,
-      profit: betAmount * multiplier * -1
-    }
-  } else {
-    outcome = {
-      payout: multiplier,
-      profit: betAmount * multiplier
-    }
-  }
+    }).catch(function(error) {
 
-  db.Log.create({
-    userId: data.id,
-    payout: outcome.payout,
-    profit: outcome.profit
-  }).then(log => {
-    console.log(log)
-    res.status(200).send(log)
-  }).catch(error => {
-    console.log(error)
-    res.status(500).send(error)
-  })
-})
+      console.log('Failed to update the game: ', error)
 
-const checkUserDeposits = (userId, userTxs, userAddress) => {
-
-  const web3 = new Web3(new Web3.providers.HttpProvider("https://mainnet.infura.io/v3/225a510e91ff4a5ca736aa438cc7f4d6"))
-
-  let ABI = [{"inputs":[],"payable":false,"stateMutability":"nonpayable","type":"constructor"},
-    {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},
-    {"indexed":true,"internalType":"address","name":"spender","type":"address"},
-    {"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Approval","type":"event"},
-    {"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint256","name":"data0","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"data1","type":"uint256"},
-    {"indexed":true,"internalType":"bytes20","name":"btcAddr","type":"bytes20"},
-    {"indexed":true,"internalType":"address","name":"claimToAddr","type":"address"},
-    {"indexed":true,"internalType":"address","name":"referrerAddr","type":"address"}],"name":"Claim","type":"event"},
-    {"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint256","name":"data0","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"data1","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"data2","type":"uint256"},
-    {"indexed":true,"internalType":"address","name":"senderAddr","type":"address"}],"name":"ClaimAssist","type":"event"},
-    {"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint256","name":"data0","type":"uint256"},
-    {"indexed":true,"internalType":"address","name":"updaterAddr","type":"address"}],"name":"DailyDataUpdate","type":"event"},
-    {"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint256","name":"data0","type":"uint256"},
-    {"indexed":true,"internalType":"uint40","name":"stakeId","type":"uint40"}],"name":"ShareRateChange","type":"event"},
-    {"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint256","name":"data0","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"data1","type":"uint256"},
-    {"indexed":true,"internalType":"address","name":"stakerAddr","type":"address"},
-    {"indexed":true,"internalType":"uint40","name":"stakeId","type":"uint40"}],"name":"StakeEnd","type":"event"},
-    {"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint256","name":"data0","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"data1","type":"uint256"},
-    {"indexed":true,"internalType":"address","name":"stakerAddr","type":"address"},
-    {"indexed":true,"internalType":"uint40","name":"stakeId","type":"uint40"},
-    {"indexed":true,"internalType":"address","name":"senderAddr","type":"address"}],"name":"StakeGoodAccounting","type":"event"},
-    {"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint256","name":"data0","type":"uint256"},
-    {"indexed":true,"internalType":"address","name":"stakerAddr","type":"address"},
-    {"indexed":true,"internalType":"uint40","name":"stakeId","type":"uint40"}],"name":"StakeStart","type":"event"},
-    {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},
-    {"indexed":true,"internalType":"address","name":"to","type":"address"},
-    {"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Transfer","type":"event"},
-    {"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint256","name":"data0","type":"uint256"},
-    {"indexed":true,"internalType":"address","name":"memberAddr","type":"address"},
-    {"indexed":true,"internalType":"uint256","name":"entryId","type":"uint256"},
-    {"indexed":true,"internalType":"address","name":"referrerAddr","type":"address"}],"name":"XfLobbyEnter","type":"event"},
-    {"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint256","name":"data0","type":"uint256"},
-    {"indexed":true,"internalType":"address","name":"memberAddr","type":"address"},
-    {"indexed":true,"internalType":"uint256","name":"entryId","type":"uint256"},
-    {"indexed":true,"internalType":"address","name":"referrerAddr","type":"address"}],"name":"XfLobbyExit","type":"event"},
-    {"payable":true,"stateMutability":"payable","type":"fallback"},
-    {"constant":true,"inputs":[],"name":"allocatedSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},
-    {"constant":true,"inputs":[{"internalType":"address","name":"owner","type":"address"},
-    {"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},
-    {"constant":false,"inputs":[{"internalType":"address","name":"spender","type":"address"},
-    {"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},
-    {"constant":true,"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},
-    {"constant":false,"inputs":[{"internalType":"uint256","name":"rawSatoshis","type":"uint256"},
-    {"internalType":"bytes32[]","name":"proof","type":"bytes32[]"},
-    {"internalType":"address","name":"claimToAddr","type":"address"},
-    {"internalType":"bytes32","name":"pubKeyX","type":"bytes32"},
-    {"internalType":"bytes32","name":"pubKeyY","type":"bytes32"},
-    {"internalType":"uint8","name":"claimFlags","type":"uint8"},
-    {"internalType":"uint8","name":"v","type":"uint8"},
-    {"internalType":"bytes32","name":"r","type":"bytes32"},
-    {"internalType":"bytes32","name":"s","type":"bytes32"},
-    {"internalType":"uint256","name":"autoStakeDays","type":"uint256"},
-    {"internalType":"address","name":"referrerAddr","type":"address"}],"name":"btcAddressClaim","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"payable":false,"stateMutability":"nonpayable","type":"function"},
-    {"constant":true,"inputs":[{"internalType":"bytes20","name":"","type":"bytes20"}],"name":"btcAddressClaims","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"view","type":"function"},
-    {"constant":true,"inputs":[{"internalType":"bytes20","name":"btcAddr","type":"bytes20"},
-    {"internalType":"uint256","name":"rawSatoshis","type":"uint256"},
-    {"internalType":"bytes32[]","name":"proof","type":"bytes32[]"}],"name":"btcAddressIsClaimable","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"view","type":"function"},
-    {"constant":true,"inputs":[{"internalType":"bytes20","name":"btcAddr","type":"bytes20"},
-    {"internalType":"uint256","name":"rawSatoshis","type":"uint256"},
-    {"internalType":"bytes32[]","name":"proof","type":"bytes32[]"}],"name":"btcAddressIsValid","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"pure","type":"function"},
-    {"constant":true,"inputs":[{"internalType":"address","name":"claimToAddr","type":"address"},
-    {"internalType":"bytes32","name":"claimParamHash","type":"bytes32"},
-    {"internalType":"bytes32","name":"pubKeyX","type":"bytes32"},
-    {"internalType":"bytes32","name":"pubKeyY","type":"bytes32"},
-    {"internalType":"uint8","name":"claimFlags","type":"uint8"},
-    {"internalType":"uint8","name":"v","type":"uint8"},
-    {"internalType":"bytes32","name":"r","type":"bytes32"},
-    {"internalType":"bytes32","name":"s","type":"bytes32"}],"name":"claimMessageMatchesSignature","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"pure","type":"function"},
-    {"constant":true,"inputs":[],"name":"currentDay","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},
-    {"constant":true,"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"dailyData","outputs":[{"internalType":"uint72","name":"dayPayoutTotal","type":"uint72"},
-    {"internalType":"uint72","name":"dayStakeSharesTotal","type":"uint72"},
-    {"internalType":"uint56","name":"dayUnclaimedSatoshisTotal","type":"uint56"}],"payable":false,"stateMutability":"view","type":"function"},
-    {"constant":true,"inputs":[{"internalType":"uint256","name":"beginDay","type":"uint256"},
-    {"internalType":"uint256","name":"endDay","type":"uint256"}],"name":"dailyDataRange","outputs":[{"internalType":"uint256[]","name":"list","type":"uint256[]"}],"payable":false,"stateMutability":"view","type":"function"},
-    {"constant":false,"inputs":[{"internalType":"uint256","name":"beforeDay","type":"uint256"}],"name":"dailyDataUpdate","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},
-    {"constant":true,"inputs":[],"name":"decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"payable":false,"stateMutability":"view","type":"function"},
-    {"constant":false,"inputs":[{"internalType":"address","name":"spender","type":"address"},
-    {"internalType":"uint256","name":"subtractedValue","type":"uint256"}],"name":"decreaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},
-    {"constant":true,"inputs":[],"name":"globalInfo","outputs":[{"internalType":"uint256[13]","name":"","type":"uint256[13]"}],"payable":false,"stateMutability":"view","type":"function"},
-    {"constant":true,"inputs":[],"name":"globals","outputs":[{"internalType":"uint72","name":"lockedHeartsTotal","type":"uint72"},
-    {"internalType":"uint72","name":"nextStakeSharesTotal","type":"uint72"},
-    {"internalType":"uint40","name":"shareRate","type":"uint40"},
-    {"internalType":"uint72","name":"stakePenaltyTotal","type":"uint72"},
-    {"internalType":"uint16","name":"dailyDataCount","type":"uint16"},
-    {"internalType":"uint72","name":"stakeSharesTotal","type":"uint72"},
-    {"internalType":"uint40","name":"latestStakeId","type":"uint40"},
-    {"internalType":"uint128","name":"claimStats","type":"uint128"}],"payable":false,"stateMutability":"view","type":"function"},
-    {"constant":false,"inputs":[{"internalType":"address","name":"spender","type":"address"},
-    {"internalType":"uint256","name":"addedValue","type":"uint256"}],"name":"increaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"view","type":"function"}]
-
-
-  let tokenAddress = '0x2b591e99afe9f32eaa6214f7b7629768c40eeb39'
-  let depositAddress = '0x4d3218B23D4f383dA54df6dDFf4833a9d36F75c3'
-  
-  let contract = new web3.eth.Contract(ABI, tokenAddress)
-
-  web3.eth.getBlockNumber().then(latestBlock => {
-    const startBlock = latestBlock - 1000000
-    
-
-    contract.getPastEvents(
-      'Transfer',
-      {
-        filter: {
-          from: userAddress,
-          to: depositAddress
-        },
-        fromBlock: startBlock,
-        toBlock: latestBlock
-      },
-      function(error, events) {
-        //console.log('Transfer events: ', events)
-
-        var unsaved = _.filter(events, function(event) {
-            if (userTxs.length === 0) {
-              return event
-            } else {
-              for (var i = 0; i < userTxs.length; i++) {
-                if (userTxs[i].txhash !== event.transactionHash) {
-                  return event
-                }
-              }
-
-            }
-        })
-
-        console.log('Unsaved Txs: ', unsaved)
-        //console.log('Unsaved Txs value eg: ', unsaved[0].returnValues.value)
-
-        unsaved.forEach(event => {
-          db.Transaction.create({
-            userId: userId,
-            txhash: event.transactionHash,
-            value: event.returnValues.value,
-            status: 'pending'
-          }).then(tx => {
-
-            console.log('Saved success!: ', tx)
-
-          }).catch(function(err) {
-            console.log(err)
-          })
-        })
-
-
-        db.Transaction.findAll({
-          where: {
-            userId: userId
-          }
-        }).then(txs => {
-
-          //console.log('FRESH TXS: ', txs)
-
-          txs.forEach(tx => {
-            console.log('txhash: ', tx.txhash)
-  
-            if (tx.status === 'pending') {
-              web3.eth.getTransactionReceipt(tx.txhash, function(err, success) {
-                if (err) {
-                  console.log('Failed to get transaction receipt', err)
-                  return
-                }
-                  
-                if (success !== null) {
-  
-                  var status = 'pending'
-                  var tokenAmount = tx.value / hearts
-                  if (success.status === true) {
-  
-                    console.log('Payment successful. Update user hex balance with following value: ', tokenAmount)
-  
-                    db.User.update({
-                      hex_balance: db.sequelize.literal('hex_balance + ' + tokenAmount) 
-                    }, {
-                      where: {
-                          id: userId
-                      }
-                    }).then(updatedUser => {
-                      console.log(updatedUser)
-                    }).catch(function(error) {
-                      console.log(error)
-                    })
-  
-                    status = 'success'
-                  } else if (success.status === false) {
-  
-                    status = 'failed'
-                    console.log('Payment failed')
-                  }
-  
-  
-                  db.Transaction.update({
-                    status: status
-                  }, {
-                    where: {
-                      txhash: tx.txhash
-                    }
-                  }).then(updatedTx => {
-                    console.log(updatedTx)
-                  }).catch(function(error) {
-                    console.log(error)
-                  })
-  
-  
-                  
-  
-                } else {
-                  console.log('No receipt yet', success)
-                }
-  
-    
-              })
-            }
-      
-            
-          })
-
-          
-        }).catch(function(err) {
-          console.log(err)
-        })
-    
-        /*events.forEach(event => {
-          console.log(event.blockHash)
-
-
-          console.log('Check block hash in the db')
-    
-          web3.eth.getTransactionReceipt(event.transactionHash, function(err, success) {
-            if (err) {
-              console.log('Failed to get transaction receipt', err)
-              return
-            }
-              
-            if (success !== null) {
-              if (success.status === true) {
-                console.log('Payment successful')
-              } else if (success.status === false) {
-                console.log('Payment failed')
-              }
-            } else {
-              console.log('No receipt yet')
-            }
-
-          })
-        })*/
-
-
-
-
-
-
-
-      }
-    )
-  })
-}
-
-
-const checkAllDeposits = () => {
-
-  db.User.findAll({
-    include: [db.Transaction]
-  }).then(users => {
-    users.forEach(user => {
-
-      if (user.hex_address === '0x0' || user.hex_address === null) {
-        return
-      }
-
-      //console.log('USER: ', user)
-      //console.log('TRANSACTIONS: ', user.transactions)
-
-      checkUserDeposits(user.id, user.transactions, user.hex_address)
     })
-  })
-}
 
-checkAllDeposits()
+    //let winValue = payload.b
+    let betAmount = parseFloat(payload.betAmount)
+    console.log('BET AMOUNT: ', betAmount)
+    console.log('PAYOUT AMOUNT: ', payload.payout)
 
-//setInterval(checkAllDeposits, 60000)
+    let winAmount = betAmount * payload.payout
+
+    console.log('win AMOUNT: ', winAmount)
+    
+    db.User.update({
+      hex_balance: db.sequelize.literal(`hex_balance + ${winAmount}`)
+    }, {
+      where: {
+        id: user.id
+      }
+    }).then(updatedUser => {
+
+      console.log('The user was successfully updated: ', updatedUser)
+      balance.emit('winAmount', winAmount)
+
+    }).catch(function(error) {
+
+      console.log('Failed to update the user: ', error)
+
+    })
+
+    let returnPayload = {
+      id: payload.gameId,
+      type: 'EXISTING_GAME',
+      blockValue: blockValue,
+      status: 'win',
+      betAmount: payload.betAmount,
+      selectedBlocks: payload.selectedBlocks,
+      payout: payload.payout,
+      winAmount: winAmount,
+    }
+
+    res.status(200).send(returnPayload)
+
+
+  } else {
+
+    if (payload.gameId === -1) {
+
+      let mines = getMineLocations(parseInt(payload.mines))
+  
+      let selectedBlocks = payload.selectedBlocks
+      console.log('MINES: ', mines)
+      console.log('SELECTED BLOCKS: ', selectedBlocks)
+  
+      // calculate win / loss
+      let win = true
+      for (var i=0; i < selectedBlocks.length; i++) {
+        if (mines.includes(selectedBlocks[i])) {
+          win = false
+          break
+        }
+      }
+  
+      console.log('Win or Loss', win)
+      console.log('Payout', payload.payout)
+  
+      blockValue = (win) ? 1 : 0
+      let statusValue = (win) ? 'pending' : 'loss'
+        
+  
+  
+      //console.log('MINES: ', mines.toString())
+  
+      const user = jwt.verify(
+        payload.token, 
+        'keyboardcat'
+      )
+  
+  
+      db.Log.create({
+        
+        betAmount: payload.betAmount,
+        mines: mines.toString(),
+        userId: user.id,
+        payout: payload.payout,
+        status: statusValue
+  
+      }).then(log => {
+  
+        let returnPayload = {
+          id: log.id,
+          type: 'NEW_GAME',
+          blockValue: blockValue,
+          status: statusValue,
+          betAmount: payload.betAmount,
+          selectedBlocks: payload.selectedBlocks,
+          payout: payload.payout,
+          winAmount: 0
+        }
+
+        if (!win) {
+          let betAmount = parseFloat(payload.betAmount)
+          console.log('BET AMOUNT: ', betAmount)
+          //console.log('PAYOUT AMOUNT: ', payload.payout)
+          //let winAmount = betAmount * payload.payout
+          //console.log('win AMOUNT: ', winAmount)
+
+          db.User.update({
+            hex_balance: db.sequelize.literal(`hex_balance - ${betAmount}`)
+          }, {
+            where: {
+              id: user.id
+            }
+          }).then(updatedUser => {
+      
+            console.log('The user was successfully updated: ', updatedUser)
+            balance.emit('lossAmount', betAmount)
+      
+          }).catch(function(error) {
+      
+            console.log('Failed to update the user: ', error)
+      
+          })
+          returnPayload.payout = 0.0
+        } 
+  
+        res.status(200).send(returnPayload)
+  
+      }).catch(error => {
+  
+        console.log(error)
+        res.status(500).send(error)
+  
+      })
+  
+    } else {
+  
+      console.log('Already got one try to update', payload)
+  
+      db.Log.findOne({
+  
+        where: {
+          id: parseInt(payload.gameId)
+        }
+  
+      }).then(log => {
+  
+        //console.log('Found following game', log)
+        let selectedBlocks = payload.selectedBlocks
+        let mines = log.mines.split(',')
+        console.log('MINES: ', mines)
+        console.log('SELECTED BLOCKS: ', selectedBlocks)
+  
+  
+        // calculate win / loss
+        let win = true
+        for (var i = 0; i < selectedBlocks.length; i++) {
+          if (mines.includes(selectedBlocks[i])) {
+            win = false
+            break
+          }
+        }
+  
+        let blockValue = (win) ? 1 : 0
+        let statusValue = (win) ? 'pending' : 'loss'
+
+        let returnPayload = {
+          id: log.id,
+          type: 'EXISTING_GAME',
+          blockValue: blockValue,
+          status: statusValue,
+          betAmount: payload.betAmount,
+          selectedBlocks: payload.selectedBlocks,
+          payout: payload.payout,
+          winAmount: 0
+        }
+  
+  
+        // update database to say game failed
+        if (statusValue === 'loss') {
+          db.Log.update({
+            status: 'loss',
+            payout: 0.0
+          }, {
+            where: {
+              id: parseInt(payload.gameId)
+            }
+          }).then(newLog => {
+    
+            console.log('Game lost and updated: ', newLog)
+    
+          }).catch(function(error) {
+            console.log('Failed to update game: ', newLog)
+    
+          })
+
+
+
+
+          let betAmount = parseFloat(payload.betAmount)
+          console.log('BET AMOUNT: ', betAmount)
+          //console.log('PAYOUT AMOUNT: ', payload.payout)
+          //let winAmount = betAmount * payload.payout
+          //console.log('win AMOUNT: ', winAmount)
+
+          db.User.update({
+            hex_balance: db.sequelize.literal(`hex_balance - ${betAmount}`)
+          }, {
+            where: {
+              id: user.id
+            }
+          }).then(updatedUser => {
+      
+            console.log('The user was successfully updated: ', updatedUser)
+            balance.emit('lossAmount', betAmount)
+      
+          }).catch(function(error) {
+      
+            console.log('Failed to update the user: ', error)
+            //res.status(200).send(returnPayload)
+          })
+
+          returnPayload.payout = 0.0
+  
+        }
+        
+
+        
+  
+        res.status(200).send(returnPayload)
+  
+      }).catch(function(error) {
+  
+        console.log(error)
+  
+      })
+    }
+  }
+  
+})
 
 module.exports = router

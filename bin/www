@@ -7,7 +7,7 @@
 var app = require('../app');
 var debug = require('debug')('hexf-api:server');
 var http = require('http');
-var io = require('../data/socket')
+var { io } = require('../data/socket')
 
 
 /**
