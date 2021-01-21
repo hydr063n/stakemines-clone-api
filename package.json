@@ -21,7 +21,7 @@
     "mysql2": "^2.1.0",
     "pug": "^2.0.4",
     "sequelize": "^5.21.3",
-    "socket.io": "^2.3.0",
+    "socket.io": "^2.4.0",
     "underscore": "^1.9.2",
     "universal-cookie": "^4.0.3",
     "urlencode": "^1.1.0",
