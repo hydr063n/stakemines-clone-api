@@ -22,7 +22,7 @@
     "pug": "^2.0.4",
     "sequelize": "^5.21.3",
     "socket.io": "^2.3.0",
-    "underscore": "^1.9.2",
+    "underscore": "^1.12.1",
     "universal-cookie": "^4.0.3",
     "urlencode": "^1.1.0",
     "web3": "^1.2.5-rc.0"
